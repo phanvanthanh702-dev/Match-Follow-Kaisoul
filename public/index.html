@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lịch Trình Bóng Đá - Trang Chủ</title>
+    <style>
+        :root {
+            --primary: #0f172a;
+            --secondary: #0284c7;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --status-live: #22c55e; /* Xanh lá */
+            --status-upcoming: #3b82f6; /* Xanh dương */
+            --status-ended: #94a3b8; /* Xám */
+        }
+
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); color: #1e293b; }
+        header { background: var(--primary); color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+
+        /* League Header Bar */
+        .league-bar { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 24px; }
+        .league-chip {
+            display: flex; align-items: center; gap: 8px; background: white; padding: 8px 16px;
+            border-radius: 20px; cursor: pointer; border: 1px solid #e2e8f0; font-weight: 600; white-space: nowrap;
+        }
+        .league-chip.active { border-color: var(--secondary); background: #e0f2fe; }
+        .league-logo { width: 24px; height: 24px; object-fit: contain; }
+
+        /* Status Dot */
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .dot-live { background-color: var(--status-live); box-shadow: 0 0 8px var(--status-live); }
+        .dot-upcoming { background-color: var(--status-upcoming); }
+        .dot-ended { background-color: var(--status-ended); }
+
+        /* Match Grid */
+        .match-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+        .match-card { background: white; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .match-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #64748b; margin-bottom: 15px; }
+
+        /* Team Flag Layout (Cờ ở trên, tên ở dưới) */
+        .teams-container { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; }
+        .team-box { display: flex; flex-direction: column; align-items: center; width: 40%; text-align: center; }
+        .flag-img { width: 48px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; margin-bottom: 6px; }
+        .team-name { font-weight: bold; font-size: 0.95rem; }
+        .score-display { font-size: 1.4rem; font-weight: 800; color: var(--primary); }
+
+        .btn { padding: 6px 12px; border-radius: 6px; border: none; background: var(--secondary); color: white; cursor: pointer; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h2>⚽ Football Hub</h2>
+        <div>
+            <a href="/admin.html" class="btn" style="background: #e11d48; text-decoration: none;">Trang Quản Lý Admin</a>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Bảng danh sách Giải đấu -->
+        <h3>Danh Sách Giải Đấu</h3>
+        <div class="league-bar" id="leagueBar"></div>
+
+        <!-- Danh sách Trận đấu -->
+        <h3>Lịch Thi Đấu & Kết Quả</h3>
+        <div class="match-grid" id="matchGrid"></div>
+    </div>
+
+    <script>
+        // Dữ liệu mẫu khởi tạo trong LocalStorage
+        const defaultLeagues = [
+            { id: 1, name: 'UEFA Champions League', logo: 'https://flagcdn.com/w80/eu.png', status: 'live' },
+            { id: 2, name: 'Copa America', logo: 'https://flagcdn.com/w80/us.png', status: 'upcoming' },
+            { id: 3, name: 'La Liga 1', logo: 'https://flagcdn.com/w80/es.png', status: 'ended' }
+        ];
+
+        const defaultMatches = [
+            {
+                id: 1, leagueId: 2,
+                homeName: 'Argentina', homeFlag: 'https://flagcdn.com/w80/ar.png',
+                awayName: 'Brazil', awayFlag: 'https://flagcdn.com/w80/br.png',
+                score: '2 - 1', status: 'live', time: '07:00 - 18/10'
+            },
+            {
+                id: 2, leagueId: 1,
+                homeName: 'Real Madrid', homeFlag: 'https://flagcdn.com/w80/es.png',
+                awayName: 'Bayern Munich', awayFlag: 'https://flagcdn.com/w80/de.png',
+                score: '0 - 0', status: 'upcoming', time: '02:00 - 20/10'
+            }
+        ];
+
+        let leagues = JSON.parse(localStorage.getItem('leagues')) || defaultLeagues;
+        let matches = JSON.parse(localStorage.getItem('matches')) || defaultMatches;
+        let selectedLeagueId = 'all';
+
+        function getStatusDot(status) {
+            if (status === 'live') return '<span class="status-dot dot-live" title="Đang diễn ra"></span>';
+            if (status === 'upcoming') return '<span class="status-dot dot-upcoming" title="Sắp diễn ra"></span>';
+            return '<span class="status-dot dot-ended" title="Đã kết thúc"></span>';
+        }
+
+        function renderLeagues() {
+            const bar = document.getElementById('leagueBar');
+            bar.innerHTML = `
+                <div class="league-chip ${selectedLeagueId === 'all' ? 'active' : ''}" onclick="filterLeague('all')">
+                    Tất Cả Giải
+                </div>
+            `;
+            leagues.forEach(l => {
+                bar.innerHTML += `
+                    <div class="league-chip ${selectedLeagueId === l.id ? 'active' : ''}" onclick="filterLeague(${l.id})">
+                        <img src="${l.logo}" class="league-logo" alt="logo">
+                        <span>${l.name}</span>
+                        ${getStatusDot(l.status)}
+                    </div>
+                `;
+            });
+        }
+
+        function renderMatches() {
+            const grid = document.getElementById('matchGrid');
+            grid.innerHTML = '';
+
+            const filtered = selectedLeagueId === 'all' 
+                ? matches 
+                : matches.filter(m => m.leagueId === selectedLeagueId);
+
+            filtered.forEach(m => {
+                const league = leagues.find(l => l.id === m.leagueId) || { name: 'Giải đấu' };
+                grid.innerHTML += `
+                    <div class="match-card">
+                        <div class="match-header">
+                            <span>${league.name}</span>
+                            <div>${getStatusDot(m.status)} <span style="margin-left:4px">${m.time}</span></div>
+                        </div>
+                        <div class="teams-container">
+                            <!-- Đội Nhà -->
+                            <div class="team-box">
+                                <img src="${m.homeFlag}" class="flag-img" alt="${m.homeName}">
+                                <div class="team-name">${m.homeName}</div>
+                            </div>
+                            
+                            <!-- Tỷ Số -->
+                            <div class="score-display">${m.score}</div>
+
+                            <!-- Đội Khách -->
+                            <div class="team-box">
+                                <img src="${m.awayFlag}" class="flag-img" alt="${m.awayName}">
+                                <div class="team-name">${m.awayName}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function filterLeague(id) {
+            selectedLeagueId = id;
+            renderLeagues();
+            renderMatches();
+        }
+
+        renderLeagues();
+        renderMatches();
+    </script>
+</body>
+</html>
