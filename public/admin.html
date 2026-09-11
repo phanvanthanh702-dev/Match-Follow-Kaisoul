@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Hub - Quản Lý Lịch Thi Đấu & Album</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f1f5f9; padding: 20px; }
+        .admin-card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        h2, h3 { color: #0f172a; margin-top: 0; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-weight: bold; margin-bottom: 4px; }
+        input, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { padding: 8px 16px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-top: 10px; }
+        .album-item { width: 100%; height: 70px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h1>🛠️ Bảng Điều Khiển Admin</h1>
+
+    <!-- 1. Quản lý Album & Tải Ảnh Up Load -->
+    <div class="admin-card">
+        <h3>🖼️ Album Ảnh Server (/uploads)</h3>
+        <form id="uploadForm">
+            <input type="file" id="imageInput" accept="image/*" required>
+            <button type="submit" class="btn" style="margin-top: 8px;">Tải Ảnh Vào Album</button>
+        </form>
+        <p style="font-size: 0.85rem; color: #666;">Nhấp vào ảnh trong album để sao chép đường dẫn (URL):</p>
+        <div class="album-grid" id="albumGrid"></div>
+    </div>
+
+    <!-- 2. Quản lý Giải Đấu -->
+    <div class="admin-card">
+        <h3>🏆 Tạo/Sửa Giải Đấu</h3>
+        <form id="leagueForm">
+            <div class="form-group"><label>Tên Giải Đấu:</label><input type="text" id="lName" required></div>
+            <div class="form-group"><label>URL Logo Giải:</label><input type="text" id="lLogo" placeholder="http://... hoặc chọn từ Album" required></div>
+            <div class="form-group">
+                <label>Trạng Thái Giải:</label>
+                <select id="lStatus">
+                    <option value="live">Đang diễn ra (Vòng tròn Xanh Lá)</option>
+                    <option value="upcoming">Sắp diễn ra (Vòng tròn Xanh Dương)</option>
+                    <option value="ended">Đã kết thúc (Vòng tròn Xám)</option>
+                </select>
+            </div>
+            <button type="submit" class="btn">Thêm Giải Đấu</button>
+        </form>
+    </div>
+
+    <!-- 3. Quản lý Trận Đấu -->
+    <div class="admin-card">
+        <h3>⚽ Tạo Trận Đấu Mới</h3>
+        <form id="matchForm">
+            <div class="form-group">
+                <label>Chọn Giải Đấu:</label>
+                <select id="mLeagueId"></select>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="flex:1;"><label>Tên Đội Nhà:</label><input type="text" id="mHomeName" required></div>
+                <div class="form-group" style="flex:1;"><label>URL Cờ Đội Nhà:</label><input type="text" id="mHomeFlag" required></div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="flex:1;"><label>Tên Đội Khách:</label><input type="text" id="mAwayName" required></div>
+                <div class="form-group" style="flex:1;"><label>URL Cờ Đội Khách:</label><input type="text" id="mAwayFlag" required></div>
+            </div>
+            <div class="form-group"><label>Tỷ Số (VD: 2 - 1):</label><input type="text" id="mScore" value="0 - 0"></div>
+            <div class="form-group"><label>Thời Gian:</label><input type="text" id="mTime" placeholder="07:00 - 18/10" required></div>
+            <div class="form-group">
+                <label>Trạng Thái Trận Đấu:</label>
+                <select id="mStatus">
+                    <option value="live">Đang diễn ra (Vòng tròn Xanh Lá)</option>
+                    <option value="upcoming">Sắp diễn ra (Vòng tròn Xanh Dương)</option>
+                    <option value="ended">Đã kết thúc (Vòng tròn Xám)</option>
+                </select>
+            </div>
+            <button type="submit" class="btn">Thêm Trận Đấu</button>
+        </form>
+    </div>
+
+    <script>
+        let leagues = JSON.parse(localStorage.getItem('leagues')) || [];
+        let matches = JSON.parse(localStorage.getItem('matches')) || [];
+
+        // Tải Album Ảnh từ Server
+        async function loadAlbum() {
+            try {
+                const res = await fetch('/api/album');
+                const images = await res.json();
+                const grid = document.getElementById('albumGrid');
+                grid.innerHTML = '';
+                images.forEach(url => {
+                    grid.innerHTML += `<img src="${url}" class="album-item" onclick="copyUrl('${url}')" title="Bấm để sao chép URL">`;
+                });
+            } catch (e) {
+                console.log("Chạy chế độ offline hoặc chưa khởi động server Node.js");
+            }
+        }
+
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('imageInput');
+            const formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+
+            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.url) {
+                alert('Tải ảnh thành công vào Album!');
+                loadAlbum();
+            }
+        });
+
+        function copyUrl(url) {
+            navigator.clipboard.writeText(url);
+            alert('Đã sao chép đường dẫn ảnh: ' + url);
+        }
+
+        // Tạo Giải Đấu
+        document.getElementById('leagueForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const newLeague = {
+                id: Date.now(),
+                name: document.getElementById('lName').value,
+                logo: document.getElementById('lLogo').value,
+                status: document.getElementById('lStatus').value
+            };
+            leagues.push(newLeague);
+            localStorage.setItem('leagues', JSON.stringify(leagues));
+            alert('Đã thêm giải đấu thành công!');
+            this.reset();
+            populateLeagueSelect();
+        });
+
+        // Tạo Trận Đấu
+        document.getElementById('matchForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const newMatch = {
+                id: Date.now(),
+                leagueId: parseInt(document.getElementById('mLeagueId').value),
+                homeName: document.getElementById('mHomeName').value,
+                homeFlag: document.getElementById('mHomeFlag').value,
+                awayName: document.getElementById('mAwayName').value,
+                awayFlag: document.getElementById('mAwayFlag').value,
+                score: document.getElementById('mScore').value,
+                time: document.getElementById('mTime').value,
+                status: document.getElementById('mStatus').value
+            };
+            matches.push(newMatch);
+            localStorage.setItem('matches', JSON.stringify(matches));
+            alert('Đã thêm trận đấu thành công!');
+            this.reset();
+        });
+
+        function populateLeagueSelect() {
+            const select = document.getElementById('mLeagueId');
+            select.innerHTML = '';
+            leagues.forEach(l => {
+                select.innerHTML += `<option value="${l.id}">${l.name}</option>`;
+            });
+        }
+
+        populateLeagueSelect();
+        loadAlbum();
+    </script>
+</body>
+</html>
